@@ -107,8 +107,41 @@ class WeReadApi:
 
     @retry(stop_max_attempt_number=3, wait_fixed=5000)
     def get_read_info(self, bookId):
-        """获取指定书的阅读时长/进度。"""
-        return self._request("/book/getprogress", bookId=bookId)
+        """获取指定书的阅读时长/进度。
+
+        官方 gateway 的 /book/getprogress 把几乎所有元数据塞在 ``book`` 嵌套
+        对象里（readingTime / startReadingTime / finishTime / progress ...），
+        而老 pro 版的私有 API 是平铺的（beginReadingDate / lastReadingDate
+        / finishedDate / readingTime / readingProgress / markedStatus ...）。
+
+        这里把 book 嵌套铺平 + 字段名映射到老格式，让 book.py 无需改动
+        就能继续工作。
+        """
+        data = self._request("/book/getprogress", bookId=bookId)
+        info = dict(data)  # shallow copy
+        book = info.pop("book", None) or {}
+        info.update(book)  # 铺平 book 嵌套
+
+        # 字段名映射：新 API → 老 API 字段
+        # 老代码用 pendulum.from_timestamp() 读这些字段，全是 Unix 时间戳
+        if "startReadingTime" in info and info["startReadingTime"]:
+            info["beginReadingDate"] = info["startReadingTime"]
+        if "updateTime" in info and info["updateTime"]:
+            info["lastReadingDate"] = info["updateTime"]
+        if "finishTime" in info and info["finishTime"]:
+            info["finishedDate"] = info["finishTime"]
+        # 老代码用 readingProgress 是 0-100 的整数
+        if "progress" in info and info["progress"] is not None:
+            info["readingProgress"] = int(info["progress"])
+        # 状态：finishTime 有值=已读(4)，否则看 isStartReading
+        if "finishTime" in info and info["finishTime"]:
+            info["markedStatus"] = 4
+        elif "isStartReading" in info and info["isStartReading"]:
+            info["markedStatus"] = 1  # 想读/在读
+        # 保留 readingTime 同名字段（直接来自 book 嵌套）
+        # recordReadingTime 是新字段，老代码用不上
+
+        return info
 
     @retry(stop_max_attempt_number=3, wait_fixed=5000)
     def get_review_list(self, bookId):

@@ -91,6 +91,10 @@ def schema_book():
             # relation 字段在第二阶段用 update 加上
             "作者": _rel_placeholder(),
             "分类": _rel_placeholder(),
+            "年": _rel_placeholder(),
+            "月": _rel_placeholder(),
+            "周": _rel_placeholder(),
+            "日": _rel_placeholder(),
         },
     }
 
@@ -391,6 +395,7 @@ def main():
         "月": "月",
         "周": "周",
         "日": "日",
+        "书架": "书架",  # 书架的"年/月/周/日" relation 自身指向时间维度
     }
     for title, schema_fn, _ in BUILD_ORDER:
         schema = schema_fn()

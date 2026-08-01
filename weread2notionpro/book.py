@@ -1,3 +1,4 @@
+import os
 import pendulum
 from weread2notionpro.notion_helper import NotionHelper
 from weread2notionpro.weread_api import WeReadApi
@@ -33,11 +34,11 @@ def insert_book_to_notion(books, index, bookId):
     status = "想读"
     if markedStatus == 4:
         status = "已读"
-    elif book.get("readingTime", 0) >= 60:
+    elif (book.get("readingTime") or 0) >= 60:
         status = "在读"
     book["阅读状态"] = status
-    book["阅读时长"] = book.get("readingTime")
-    book["阅读天数"] = book.get("totalReadDay")
+    book["阅读时长"] = book.get("readingTime") or 0
+    book["阅读天数"] = book.get("totalReadDay") or 0
     book["评分"] = book.get("newRating")
     if book.get("newRatingDetail") and book.get("newRatingDetail").get("myRating"):
         book["我的评分"] = rating.get(book.get("newRatingDetail").get("myRating"))
@@ -158,6 +159,9 @@ notion_books = {}
 def main():
     global notion_books
     global archive_dict
+    force = os.getenv("FORCE_RESYNC") == "1"
+    if force:
+        print("FORCE_RESYNC=1: 跳过 not_need_sync 检查，所有书都重写")
     bookshelf_books = weread_api.get_bookshelf()
     notion_books = notion_helper.get_all_book()
     # 官方 Gateway 的 /shelf/sync 不返回 bookProgress 字段（每本书的阅读进度
@@ -181,7 +185,7 @@ def main():
                 value.get("status") != "已读"
                 or (value.get("status") == "已读" and value.get("myRating"))
             )
-        ):
+        ) and not force:
             not_need_sync.append(key)
     notebooks = weread_api.get_notebooklist()
     notebooks = [d["bookId"] for d in notebooks if "bookId" in d]
