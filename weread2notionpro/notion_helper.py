@@ -47,8 +47,13 @@ class NotionHelper:
         "SETTING_DATABASE_NAME": "设置",
     }
     database_id_dict = {}
-    # 优先从环境变量读取（GitHub Secret），fallback 到扫页面
-    heatmap_block_id = os.getenv("HEATMAP_BLOCK_ID")
+    # Auto-detect the heatmap embed block in __init__ by scanning the page
+    # (we used to also read HEATMAP_BLOCK_ID from env, but archived blocks
+    # would silently keep the old id and the workflow would update the wrong
+    # block — see https://github.com/zhaoyue-zhang/weread2notion-pro-skill_version
+    # for the rfc). If you ever have multiple heatmap embeds, you can
+    # override the detected one by setting this class attribute later.
+    heatmap_block_id = None
     show_color = True
     block_type = "callout"
     sync_bookmark = True
@@ -125,7 +130,17 @@ class NotionHelper:
                     child.get("id")
                 )
             elif child["type"] == "embed" and child.get("embed").get("url"):
-                if child.get("embed").get("url").startswith("https://heatmap.malinkang.com/"):
+                url = child.get("embed").get("url")
+                # Accept both the legacy malinkang URL and our own raw GitHub
+                # heatmap SVG. Only set heatmap_block_id if we haven't found
+                # one yet (first match wins; later ones are ignored). This
+                # also handles the case where HEATMAP_BLOCK_ID is unset
+                # or points to a block the user has since archived.
+                if self.heatmap_block_id is None and (
+                    url.startswith("https://heatmap.malinkang.com/")
+                    or "/weread-heatmap.svg" in url
+                    or "/weread.svg" in url
+                ):
                     self.heatmap_block_id = child.get("id")
             # 如果子块有子块，递归调用函数
             if "has_children" in child and child["has_children"]:
