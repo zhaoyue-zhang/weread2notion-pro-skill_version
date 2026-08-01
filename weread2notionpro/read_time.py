@@ -68,10 +68,18 @@ def get_file():
 
     # 检查文件夹是否存在
     if os.path.exists(folder_path) and os.path.isdir(folder_path):
-        entries = os.listdir(folder_path)
-
-        file_name = entries[0] if entries else None
-        return file_name
+        entries = [
+            f for f in os.listdir(folder_path)
+            if f.lower().endswith(".svg")
+        ]
+        if not entries:
+            return None
+        # 取最新修改的 svg（GitHub Actions workflow 会把 weread.svg 改名成 uuid.svg）
+        entries.sort(
+            key=lambda f: os.path.getmtime(os.path.join(folder_path, f)),
+            reverse=True,
+        )
+        return entries[0]
     else:
         print("OUT_FOLDER does not exist.")
         return None
