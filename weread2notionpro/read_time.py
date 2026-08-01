@@ -87,10 +87,9 @@ def main():
     ref = os.getenv("REF", "").split("/")[-1] if os.getenv("REF") else ""
     if image_file and repo and ref:
         image_url = f"https://raw.githubusercontent.com/{repo}/{ref}/OUT_FOLDER/{image_file}"
-        heatmap_url = f"https://heatmap.malinkang.com/?image={image_url}"
         if notion_helper.heatmap_block_id:
             response = notion_helper.update_heatmap(
-                block_id=notion_helper.heatmap_block_id, url=heatmap_url
+                block_id=notion_helper.heatmap_block_id, url=image_url
             )
         else:
             print(f"更新热力图失败，没有添加热力图占位。具体参考：{HEATMAP_GUIDE}")

@@ -47,7 +47,8 @@ class NotionHelper:
         "SETTING_DATABASE_NAME": "设置",
     }
     database_id_dict = {}
-    heatmap_block_id = None
+    # 优先从环境变量读取（GitHub Secret），fallback 到扫页面
+    heatmap_block_id = os.getenv("HEATMAP_BLOCK_ID")
     show_color = True
     block_type = "callout"
     sync_bookmark = True

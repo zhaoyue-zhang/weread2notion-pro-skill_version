@@ -62,7 +62,8 @@ jobs:
         run: |
           git config --local user.email "action@github.com"
           git config --local user.name "GitHub Action"
-          git add .
+          # -f 强制 add（绕过 .gitignore，让 SVG 真的进 git 才能用 raw.githubusercontent.com 访问）
+          git add -f OUT_FOLDER/*.svg
           git commit -m 'add new heatmap' || echo "nothing to commit"
           git push || echo "nothing to push"
       - name: read time sync
