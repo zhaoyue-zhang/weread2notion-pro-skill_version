@@ -128,10 +128,13 @@ def make_patched_loader(api_key):
 def inject_title(svg_path: str, year: int, stats: dict) -> None:
     """Rewrite the SVG header to show:
        Line 1: {USER_DISPLAY_NAME} 的阅读记录
-       Line 2: {year}：总阅读时长 {h} 小时 {m} 分钟 · 阅读 {d} 天 · 最长连续 {s} 天
-    and grow the viewBox to fit the extra line. Also removes the
-    redundant "2026: 128 hours" line that github_heatmap's drawer
-    auto-adds in the per-year summary."""
+       Line 2: {year}：总阅读时长 {h} 小时 {m} 分钟 · 阅读 {d} 天 · 最长全勤 {s} 天
+    and grow the viewBox to fit the extra line. Also:
+      - removes the redundant "2026: 128 hours" line that
+        github_heatmap's drawer auto-adds in the per-year summary
+      - adds a color legend (4 swatches + 少/多 labels) below the stats
+      - highlights "today" with a 2px outline so the current cell stands out
+    """
     with open(svg_path, "r", encoding="utf-8") as f:
         svg = f.read()
 
@@ -139,13 +142,26 @@ def inject_title(svg_path: str, year: int, stats: dict) -> None:
     stats_line = (
         f"{year}：总阅读时长 {stats['hours']} 小时 {stats['minutes']} 分钟"
         f" · 阅读 {stats['active_days']} 天"
-        f" · 最长连续 {stats['longest_streak']} 天"
+        f" · 最长全勤 {stats['longest_streak']} 天"
     )
 
-    # 1) Grow viewBox/width/height by ~5mm so the second line doesn't overlap cells.
-    #    We target the <svg ...> opening tag specifically so we don't match the
-    #    "<?xml ... ?>" prolog's '>' (which is the first '>' in the file).
-    extra_mm = 5.0
+    # GitHub-style 4-level color scale (matches the colors github_heatmap
+    # uses by default). We hardcode them here because the monkey-patched
+    # loader doesn't expose p.level_colors cleanly. Note: labels containing
+    # '<' must be XML-escaped (&lt;) since we hand-stitch them into the
+    # SVG text content.
+    LEGEND = [
+        ("#EBEDF0", "0"),
+        ("#ACE7AE", "&lt;30 分"),
+        ("#69C16E", "30-60 分"),
+        ("#549F57", "1-2 小时"),
+        ("#2F7D32", "2 小时+"),
+    ]
+
+    # 1) Grow viewBox/width/height. We need ~10mm extra this time (stats
+    #    line + color legend row + 留 padding). Target the <svg ...> opening
+    #    tag specifically to avoid matching the "<?xml ?>" prolog's '>'.
+    extra_mm = 10.0
 
     def bump_svg_root_attr(attr, value_kind=""):
         nonlocal svg
@@ -160,7 +176,6 @@ def inject_title(svg_path: str, year: int, stats: dict) -> None:
 
     bump_svg_root_attr("height", "mm")
     bump_svg_root_attr("width", "mm")
-    # viewBox has form "0,0,W,H" — bump W and H
     svg = re.sub(
         r'(<svg\b[^>]*?)viewBox="0,0,([\d.]+),([\d.]+)"',
         lambda m: (
@@ -172,7 +187,7 @@ def inject_title(svg_path: str, year: int, stats: dict) -> None:
         count=1,
     )
 
-    # 2) Bump the background <rect> width/height too
+    # Bump the background <rect> too
     svg = re.sub(
         r'(<rect fill="#FFFFFF" height=")([\d.]+)("\s+width=")([\d.]+)("\s+x="0"\s+y="0"\s*/>)',
         lambda m: (
@@ -183,7 +198,7 @@ def inject_title(svg_path: str, year: int, stats: dict) -> None:
         count=1,
     )
 
-    # 3) Delete the redundant "2026: 128 hours" line (drawer auto-added)
+    # 2) Delete the redundant "2026: 128 hours" line (drawer auto-added)
     svg = re.sub(
         r'<text[^>]*font-size:3px[^>]*>[^<]*hours</text>',
         "",
@@ -191,7 +206,7 @@ def inject_title(svg_path: str, year: int, stats: dict) -> None:
         count=1,
     )
 
-    # 4) Replace the original wechat-read title text with the new title + stats line
+    # 3) Replace the original wechat-read title text with the new title + stats line
     title_pattern = re.compile(
         r'(<text fill="#000000" style="font-size:6px;[^"]*"[^>]*>)wechat-read(</text>)'
     )
@@ -204,11 +219,69 @@ def inject_title(svg_path: str, year: int, stats: dict) -> None:
     svg, n = title_pattern.subn(new_title_block, svg, count=1)
     if n == 0:
         print("warn: could not find original wechat-read title to replace")
+
+    # 4) Append a color legend (swatches + 少/多 + duration labels) right
+    #    before the closing </svg>. Sizes are tuned so the legend stays
+    #    readable at typical Notion-embed widths (~700-1000px).
+    swatch_size = 5.0
+    label_gap = 2.0
+    legend_y = 66.5  # mm — below the heatmap (heatmap ends at ~62.5mm)
+    cur_x = 10.0
+    swatches_xml = []
+    for fill, label in LEGEND:
+        swatches_xml.append(
+            f'<rect fill="{fill}" x="{cur_x}" y="{legend_y}" '
+            f'width="{swatch_size}" height="{swatch_size}" rx="1" ry="1" />'
+        )
+        swatches_xml.append(
+            f'<text fill="#000000" style="font-size:3.5px; font-family:Arial;" '
+            f'x="{cur_x}" y="{legend_y + swatch_size + 3.8}">{label}</text>'
+        )
+        cur_x += swatch_size + label_gap
+    # "少" / "多" labels at the ends
+    cur_x += 1.0
+    swatches_xml.append(
+        f'<text fill="#000000" style="font-size:4px; font-family:Arial; font-weight:bold;" '
+        f'x="{cur_x}" y="{legend_y + swatch_size - 0.8}">少</text>'
+    )
+    cur_x += 5.0
+    swatches_xml.append(
+        f'<text fill="#000000" style="font-size:4px; font-family:Arial; font-weight:bold;" '
+        f'x="{cur_x}" y="{legend_y + swatch_size - 0.8}">多</text>'
+    )
+
+    # Caption above the legend (italic, gray)
+    caption = (
+        f'<text fill="#666666" style="font-size:3.2px; font-family:Arial; font-style:italic;" '
+        f'x="10" y="{legend_y - 1.2}">颜色越深代表当天阅读时长越长 · 鼠标悬停查看具体分钟数</text>'
+    )
+
+    legend_block = caption + "".join(swatches_xml)
+    svg = svg.replace("</svg>", legend_block + "</svg>")
+
+    # 5) Highlight "today" with a 2px black stroke so the current cell
+    #    stands out (matches CarveTime's is-today outline).
+    tz = ZoneInfo("Asia/Shanghai")
+    today_str = datetime.now(tz).strftime("%Y-%m-%d")
+    # Find the <rect ...><title>YYYY-MM-DD</title></rect> for today and
+    # add a stroke="..." stroke-width="0.4" to the rect.
+    pattern = re.compile(
+        rf'(<rect[^/]*?)(>\s*<title>{today_str}</title>)',
+    )
+    if pattern.search(svg):
+        svg, n = pattern.subn(
+            r'\1 stroke="#000000" stroke-width="0.4"\2',
+            svg,
+            count=1,
+        )
+        if n:
+            print(f"highlighted today ({today_str})")
     else:
-        print(f"injected title + stats into {svg_path}")
+        print(f"warn: today ({today_str}) not in heatmap (skipping outline)")
 
     with open(svg_path, "w", encoding="utf-8") as f:
         f.write(svg)
+    print(f"injected title + stats + legend into {svg_path}")
 
 
 def main():
