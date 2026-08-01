@@ -83,8 +83,10 @@ notion_helper = NotionHelper()
 weread_api = WeReadApi()
 def main():
     image_file = get_file()
-    if image_file:
-        image_url = f"https://raw.githubusercontent.com/{os.getenv('REPOSITORY')}/{os.getenv('REF').split('/')[-1]}/OUT_FOLDER/{image_file}"
+    repo = os.getenv("REPOSITORY")
+    ref = os.getenv("REF", "").split("/")[-1] if os.getenv("REF") else ""
+    if image_file and repo and ref:
+        image_url = f"https://raw.githubusercontent.com/{repo}/{ref}/OUT_FOLDER/{image_file}"
         heatmap_url = f"https://heatmap.malinkang.com/?image={image_url}"
         if notion_helper.heatmap_block_id:
             response = notion_helper.update_heatmap(
@@ -93,9 +95,10 @@ def main():
         else:
             print(f"更新热力图失败，没有添加热力图占位。具体参考：{HEATMAP_GUIDE}")
     else:
-        print(f"更新热力图失败，没有生成热力图。具体参考：{HEATMAP_GUIDE}")
-    api_data = weread_api.get_api_data()
-    readTimes = {int(key): value for key, value in api_data.get("readTimes").items()}
+        print(f"更新热力图失败，没有生成热力图或缺少 REPOSITORY/REF 环境变量。具体参考：{HEATMAP_GUIDE}")
+    api_data = weread_api.get_api_data() or {}
+    readTimes_raw = api_data.get("readTimes") or {}
+    readTimes = {int(key): value for key, value in readTimes_raw.items()}
     now = pendulum.now("Asia/Shanghai").start_of("day")
     today_timestamp = now.int_timestamp
     if today_timestamp not in readTimes:
@@ -103,9 +106,13 @@ def main():
     readTimes = dict(sorted(readTimes.items()))
     results = notion_helper.query_all(database_id=notion_helper.day_database_id)
     for result in results:
-        timestamp = result.get("properties").get("时间戳").get("number")
-        duration = result.get("properties").get("时长").get("number")
+        props = result.get("properties") or {}
+        timestamp = (props.get("时间戳") or {}).get("number")
+        duration = (props.get("时长") or {}).get("number")
         id = result.get("id")
+        if timestamp is None:
+            # 这个 page 没有时间戳，跳过
+            continue
         if timestamp in readTimes:
             value = readTimes.pop(timestamp)
             if value != duration:

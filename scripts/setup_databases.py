@@ -194,6 +194,7 @@ def schema_day():
                 "标题": {"title": {}},
                 "日期": {"date": {}},
                 "时间戳": {"number": {}},
+                "时长": {"number": {}},
                 "年": _rel_placeholder(),
                 "月": _rel_placeholder(),
                 "周": _rel_placeholder(),
