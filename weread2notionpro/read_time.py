@@ -94,7 +94,13 @@ def main():
     repo = os.getenv("REPOSITORY")
     ref = os.getenv("REF", "").split("/")[-1] if os.getenv("REF") else ""
     if image_file and repo and ref:
-        image_url = f"https://raw.githubusercontent.com/{repo}/{ref}/OUT_FOLDER/{image_file}"
+        base_url = f"https://raw.githubusercontent.com/{repo}/{ref}/OUT_FOLDER/{image_file}"
+        # Notion's embed block caches the SVG the first time it fetches it,
+        # and won't auto-refresh even if the file on raw.githubusercontent.com
+        # changes. Adding ?v=<timestamp> forces Notion to re-fetch the same
+        # file under what it sees as a new URL. raw.githubusercontent.com
+        # ignores the query string so the served content is still the latest.
+        image_url = f"{base_url}?v={int(datetime.utcnow().timestamp())}"
         if notion_helper.heatmap_block_id:
             response = notion_helper.update_heatmap(
                 block_id=notion_helper.heatmap_block_id, url=image_url
