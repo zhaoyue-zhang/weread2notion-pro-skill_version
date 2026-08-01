@@ -250,10 +250,14 @@ def inject_title(svg_path: str, year: int, stats: dict) -> None:
         f'x="{cur_x}" y="{legend_y + swatch_size - 0.8}">多</text>'
     )
 
-    # Caption above the legend (italic, gray)
+    # Caption above the legend (italic, gray). Note: Notion embed renders
+    # SVG as a static image — the <title> tooltips that github_heatmap
+    # adds on each day-cell are not interactive there, so we don't promise
+    # hover-to-inspect in the caption. Anyone who wants per-day detail
+    # can open the SVG URL directly in a browser.
     caption = (
         f'<text fill="#666666" style="font-size:3.2px; font-family:Arial; font-style:italic;" '
-        f'x="10" y="{legend_y - 1.2}">颜色越深代表当天阅读时长越长 · 鼠标悬停查看具体分钟数</text>'
+        f'x="10" y="{legend_y - 1.2}">颜色越深代表当天阅读时长越长</text>'
     )
 
     legend_block = caption + "".join(swatches_xml)
