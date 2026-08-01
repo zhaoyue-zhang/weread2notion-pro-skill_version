@@ -55,15 +55,17 @@ jobs:
           cd OUT_FOLDER
           find . -type f ! -name "weread.svg" -exec rm -f {} +
           cd ..
-          RANDOM_FILENAME=$(uuidgen).svg
+          # 用 Python 生成 UUID（GitHub Actions ubuntu-latest 默认没装 uuid-runtime）
+          RANDOM_FILENAME=$(python3 -c "import uuid; print(uuid.uuid4())").svg
           mv ./OUT_FOLDER/weread.svg ./OUT_FOLDER/$RANDOM_FILENAME
           echo "Renamed file to $RANDOM_FILENAME"
+          ls -la OUT_FOLDER/
       - name: push
         run: |
           git config --local user.email "action@github.com"
           git config --local user.name "GitHub Action"
           # -f 强制 add（绕过 .gitignore，让 SVG 真的进 git 才能用 raw.githubusercontent.com 访问）
-          git add -f OUT_FOLDER/*.svg
+          git add -f OUT_FOLDER/*.svg || { echo "ERROR: no SVG to add"; ls -la OUT_FOLDER/; exit 1; }
           git commit -m 'add new heatmap' || echo "nothing to commit"
           git push || echo "nothing to push"
       - name: read time sync
