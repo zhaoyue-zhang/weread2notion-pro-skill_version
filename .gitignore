@@ -15,7 +15,9 @@ __pycache__/
 
 # WeRead sync artifacts
 bookmark.json
-OUT_FOLDER/
+# NOTE: OUT_FOLDER/ is NOT ignored — we need the heatmap SVG
+# to be committed so raw.githubusercontent.com can serve it
+# for the Notion embed.
 
 # Build / dist
 build/
