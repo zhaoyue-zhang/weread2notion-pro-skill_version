@@ -122,6 +122,15 @@ def main():
     from github_heatmap.cli import run
     run()
 
+    # Force every build to produce a different file (otherwise git
+    # sees no diff when the heatmap data is identical day-over-day
+    # and "nothing to commit" makes the workflow silently fail).
+    out_file = os.path.join(ROOT, "OUT_FOLDER", "weread.svg")
+    if os.path.exists(out_file):
+        with open(out_file, "a", encoding="utf-8") as f:
+            f.write(f"\n<!-- built at {datetime.utcnow().isoformat()}Z -->\n")
+        print(f"appended timestamp to {out_file}")
+
 
 if __name__ == "__main__":
     main()

@@ -64,18 +64,21 @@ jobs:
           ls -la OUT_FOLDER/
       - name: push
         run: |
-          set -ex
+          set -e
           git config --local user.email "action@github.com"
           git config --local user.name "GitHub Action"
-          echo "--- git status before add ---"
-          git status
-          echo "--- git add ---"
           git add OUT_FOLDER/weread-heatmap.svg
-          echo "--- git diff --cached ---"
-          git diff --cached --stat
-          echo "--- git commit ---"
-          git commit -m "update: heatmap $(date -u +'%Y-%m-%dT%H:%M:%SZ')"
-          echo "--- git push ---"
+          # 优雅处理 "nothing to commit"：当天没新读时 SVG 内容可能不变，
+          # build_heatmap 现在会 append 时间戳避免这个问题，但仍然
+          # 用 --allow-empty 兜底保证 push 不会因为没 diff 而 fail
+          if git diff --cached --quiet; then
+            echo "No diff — creating empty marker commit"
+            git commit --allow-empty -m "chore: heatmap run $(date -u +'%Y-%m-%dT%H:%M:%SZ') (no data change)"
+          else
+            echo "--- diff ---"
+            git diff --cached --stat
+            git commit -m "update: heatmap $(date -u +'%Y-%m-%dT%H:%M:%SZ')"
+          fi
           git push
       - name: read time sync
         run: |
