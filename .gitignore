@@ -1,0 +1,21 @@
+# Secrets — never commit
+.env
+.env.local
+.env.*.local
+
+# macOS
+.DS_Store
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+.mypy_cache/
+
+# WeRead sync artifacts
+bookmark.json
+
+# Build / dist
+build/
+dist/
