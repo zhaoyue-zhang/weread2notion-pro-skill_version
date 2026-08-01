@@ -1,6 +1,7 @@
 requests
 notion-client
 github-heatmap
+svgwrite
 retrying
 pendulum
 python-dotenv
