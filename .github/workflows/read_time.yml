@@ -92,6 +92,7 @@ jobs:
       - name: aggregate durations to year/month/week
         env:
           NOTION_TOKEN: ${{ secrets.NOTION_TOKEN }}
-        if: always()              # 上一部即使失败也跑 aggregate（数据有用，多点重复只是总和略多）
+        if: always()              # 即使 dedupe 失败也跑 aggregate
+        continue-on-error: true   # aggregate 也是 best-effort；「日」database 已有原数据，下次跑能修
         run: |
           python scripts/aggregate_durations.py
