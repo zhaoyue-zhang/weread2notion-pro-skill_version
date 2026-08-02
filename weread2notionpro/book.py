@@ -66,12 +66,30 @@ def insert_book_to_notion(books, index, bookId):
             )
             for x in book.get("author").split(" ")
         ]
+        # 分类：老 pro 版 categories 是数组，官方 /book/info 返回单数字符串 category
         if book.get("categories"):
+            # 老 pro 版：[{title: ...}, ...]
+            cat_items = [
+                (x.get("title") if isinstance(x, dict) else x)
+                for x in book.get("categories")
+            ]
+        elif book.get("category"):
+            # 官方 API: "精品小说-社会小说" 这种，按 - 拆分
+            raw = str(book.get("category"))
+            for sep in ("-", "·", "/", ">"):
+                if sep in raw:
+                    cat_items = [s.strip() for s in raw.split(sep) if s.strip()]
+                    break
+            else:
+                cat_items = [raw.strip()] if raw.strip() else []
+        else:
+            cat_items = []
+        if cat_items:
             book["分类"] = [
                 notion_helper.get_relation_id(
-                    x.get("title"), notion_helper.category_database_id, TAG_ICON_URL
+                    name, notion_helper.category_database_id, TAG_ICON_URL
                 )
-                for x in book.get("categories")
+                for name in cat_items
             ]
     properties = utils.get_properties(book, book_properties_type_dict)
     if book.get("时间"):
