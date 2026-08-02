@@ -83,6 +83,11 @@ jobs:
       - name: read time sync
         run: |
           read_time
+      - name: dedupe day pages
+        env:
+          NOTION_TOKEN: ${{ secrets.NOTION_TOKEN }}
+        run: |
+          python scripts/dedupe_day_pages.py
       - name: aggregate durations to year/month/week
         env:
           NOTION_TOKEN: ${{ secrets.NOTION_TOKEN }}
