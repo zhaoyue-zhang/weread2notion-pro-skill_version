@@ -170,6 +170,8 @@ def schema_year():
             "properties": {
                 "标题": {"title": {}},
                 "日期": {"date": {}},
+                # 总阅读时长（单位：小时，小数；由 aggregate_durations.py 回填）
+                "总阅读时长": {"number": {"format": "number"}},
             }}
 
 
@@ -178,6 +180,8 @@ def schema_month():
             "properties": {
                 "标题": {"title": {}},
                 "日期": {"date": {}},
+                # 总阅读时长（单位：分钟，整数；由 aggregate_durations.py 回填）
+                "总阅读时长": {"number": {"format": "number"}},
                 "年": _rel_placeholder(),
             }}
 
@@ -187,6 +191,8 @@ def schema_week():
             "properties": {
                 "标题": {"title": {}},
                 "日期": {"date": {}},
+                # 总阅读时长（单位：分钟，整数；由 aggregate_durations.py 回填）
+                "总阅读时长": {"number": {"format": "number"}},
                 "年": _rel_placeholder(),
                 "月": _rel_placeholder(),
             }}
@@ -317,6 +323,24 @@ def add_relation_property(token, db_id, prop_name, target_db_id):
     if r.status_code not in (200, 201):
         raise SystemExit(
             f"加 relation 失败: {db_id}.{prop_name} -> {target_db_id} "
+            f"status={r.status_code} body={r.text[:300]}"
+        )
+
+
+def add_number_property(token, db_id, prop_name, fmt="number"):
+    """Add a number property to an existing database.
+
+    Idempotent: if the property already exists, this is a no-op (the
+    PATCH call returns 200 with the existing schema).
+    """
+    body = {"properties": {prop_name: {"number": {"format": fmt}}}}
+    r = requests.patch(
+        f"{NOTION_API}/databases/{db_id}",
+        headers=make_headers(token), json=body,
+    )
+    if r.status_code not in (200, 201):
+        raise SystemExit(
+            f"加 number 失败: {db_id}.{prop_name} "
             f"status={r.status_code} body={r.text[:300]}"
         )
 

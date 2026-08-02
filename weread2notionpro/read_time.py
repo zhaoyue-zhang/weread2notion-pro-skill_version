@@ -109,7 +109,9 @@ def main():
             print(f"更新热力图失败，没有添加热力图占位。具体参考：{HEATMAP_GUIDE}")
     else:
         print(f"更新热力图失败，没有生成热力图或缺少 REPOSITORY/REF 环境变量。具体参考：{HEATMAP_GUIDE}")
-    api_data = weread_api.get_api_data() or {}
+    # 拿 daily 粒度数据：loop 12 months of mode=monthly
+    # (get_api_data() 用 annually 模式只能拿到 12 个月分桶，daily 全部 0)
+    api_data = weread_api.get_daily_data() or {}
     readTimes_raw = api_data.get("readTimes") or {}
     readTimes = {int(key): value for key, value in readTimes_raw.items()}
     now = pendulum.now("Asia/Shanghai").start_of("day")

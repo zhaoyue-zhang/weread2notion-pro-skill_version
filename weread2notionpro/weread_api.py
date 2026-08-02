@@ -245,6 +245,44 @@ class WeReadApi:
 
         return {"readTimes": {str(k): v for k, v in merged.items()}}
 
+    def get_daily_data(self, year=None):
+        """获取 daily 粒度的阅读时长（每条对应一天的秒数）。
+
+        用 ``mode=monthly`` + baseTime=<每月 1 号> 循环 12 个月。
+        官方 gateway 接受 baseTime（实测），返回该月每天的 readTime。
+        返回 dict 形如 ``{timestamp_int: seconds}``，覆盖全年。
+        """
+        from datetime import datetime
+        from zoneinfo import ZoneInfo
+
+        if year is None:
+            year = datetime.now(ZoneInfo("Asia/Shanghai")).year
+
+        tz = ZoneInfo("Asia/Shanghai")
+        merged = {}
+        for month in range(1, 13):
+            try:
+                base = int(datetime(year, month, 1, tzinfo=tz).timestamp())
+            except ValueError:
+                continue
+            try:
+                data = self._request(
+                    "/readdata/detail", mode="monthly", baseTime=base
+                )
+            except Exception as e:
+                print(f"warn: {year}-{month:02d} fetch failed: {e}")
+                continue
+            for k, v in (data.get("readTimes") or {}).items():
+                merged[int(k)] = int(v)
+
+        # 当天补一条 0，让 read_time 也能在「日」database 创建今天的 page
+        today_ts = int(
+            datetime.now(tz).replace(hour=0, minute=0, second=0, microsecond=0).timestamp()
+        )
+        merged.setdefault(today_ts, 0)
+
+        return {"readTimes": {str(k): v for k, v in merged.items()}}
+
     def get_bookshelf(self):
         """获取书架。"""
         return self._request("/shelf/sync", synckey=0, teenmode=0, album=1, onlyBookid=0)
