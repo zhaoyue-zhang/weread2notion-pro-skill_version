@@ -86,10 +86,12 @@ jobs:
       - name: dedupe day pages
         env:
           NOTION_TOKEN: ${{ secrets.NOTION_TOKEN }}
+        continue-on-error: true   # dedupe 是 best-effort；失败也不让整个 workflow 挂掉
         run: |
           python scripts/dedupe_day_pages.py
       - name: aggregate durations to year/month/week
         env:
           NOTION_TOKEN: ${{ secrets.NOTION_TOKEN }}
+        if: always()              # 上一部即使失败也跑 aggregate（数据有用，多点重复只是总和略多）
         run: |
           python scripts/aggregate_durations.py
