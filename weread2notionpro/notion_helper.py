@@ -146,6 +146,21 @@ class NotionHelper:
             if "has_children" in child and child["has_children"]:
                 self.search_database(child["id"])
 
+        # Fallback for renamed databases: if the user renamed "年" to
+        # "阅读数据" in Notion, search_database will only see "阅读数据"
+        # but the rest of the code asks for database_id_dict["年"].
+        # Map common renames to the schema name so existing pages still
+        # get classified correctly.
+        RENAMED = {
+            "年": ["阅读数据", "year", "Year"],
+        }
+        for canonical, alts in RENAMED.items():
+            if canonical not in self.database_id_dict:
+                for alt in alts:
+                    if alt in self.database_id_dict:
+                        self.database_id_dict[canonical] = self.database_id_dict[alt]
+                        break
+
     def update_book_database(self):
         """更新数据库"""
         response = self.client.databases.retrieve(database_id=self.book_database_id)
