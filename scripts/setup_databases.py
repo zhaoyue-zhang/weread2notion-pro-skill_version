@@ -48,6 +48,24 @@ ICON_CHAPTER = "https://www.notion.so/icons/list_gray.svg"
 ICON_TIME = "https://www.notion.so/icons/target_gray.svg"
 
 
+# Notion formula 表达式：把「总阅读时长」(number，单位分钟) 渲染成
+# "1h 23m" / "46d 14h" 这样的友好格式。
+# - empty() 处理页面还没聚合的情况
+# - == 0 处理聚合后 0 值的页面（避免显示 "0m"）
+# - < 1440 走小时/分钟；>= 1440 走天/小时
+_DURATION_FORMULA = (
+    'if(empty(prop("总阅读时长")), "", '
+    'if(prop("总阅读时长") == 0, "", '
+    'if(prop("总阅读时长") >= 1440, '
+    'format(floor(prop("总阅读时长") / 1440)) + "d " + '
+    'format(floor(mod(prop("总阅读时长"), 1440) / 60)) + "h", '
+    'if(prop("总阅读时长") >= 60, '
+    'format(floor(prop("总阅读时长") / 60)) + "h " + '
+    'format(mod(prop("总阅读时长"), 60)) + "m", '
+    'format(prop("总阅读时长")) + "m"))))'
+)
+
+
 def schema_category():
     return {"title": "分类", "icon": ICON_CATEGORY,
             "properties": {"标题": {"title": {}}}}
@@ -170,8 +188,14 @@ def schema_year():
             "properties": {
                 "标题": {"title": {}},
                 "日期": {"date": {}},
-                # 总阅读时长（单位：小时，小数；由 aggregate_durations.py 回填）
+                # 总阅读时长（分钟，整数）。渲染靠下面的 formula 字段
                 "总阅读时长": {"number": {"format": "number"}},
+                # 自动格式化成 "1h 23m" / "46d 14h"，对应"分钟"的人类友好展示
+                "总阅读时长（格式化）": {
+                    "formula": {
+                        "expression": _DURATION_FORMULA
+                    }
+                },
             }}
 
 
@@ -180,8 +204,10 @@ def schema_month():
             "properties": {
                 "标题": {"title": {}},
                 "日期": {"date": {}},
-                # 总阅读时长（单位：分钟，整数；由 aggregate_durations.py 回填）
                 "总阅读时长": {"number": {"format": "number"}},
+                "总阅读时长（格式化）": {
+                    "formula": {"expression": _DURATION_FORMULA}
+                },
                 "年": _rel_placeholder(),
             }}
 
@@ -191,8 +217,10 @@ def schema_week():
             "properties": {
                 "标题": {"title": {}},
                 "日期": {"date": {}},
-                # 总阅读时长（单位：分钟，整数；由 aggregate_durations.py 回填）
                 "总阅读时长": {"number": {"format": "number"}},
+                "总阅读时长（格式化）": {
+                    "formula": {"expression": _DURATION_FORMULA}
+                },
                 "年": _rel_placeholder(),
                 "月": _rel_placeholder(),
             }}
@@ -341,6 +369,26 @@ def add_number_property(token, db_id, prop_name, fmt="number"):
     if r.status_code not in (200, 201):
         raise SystemExit(
             f"加 number 失败: {db_id}.{prop_name} "
+            f"status={r.status_code} body={r.text[:300]}"
+        )
+
+
+def add_duration_property(token, db_id, prop_name):
+    """Add a duration property to an existing database.
+
+    Duration values are minutes; Notion renders them as "1h 23m" / "2d 4h".
+    Idempotent (Patching an existing property of the same type is a no-op;
+    Patching with a *different* type fails — call remove_property first
+    if the property exists with a different type).
+    """
+    body = {"properties": {prop_name: {"duration": {}}}}
+    r = requests.patch(
+        f"{NOTION_API}/databases/{db_id}",
+        headers=make_headers(token), json=body,
+    )
+    if r.status_code not in (200, 201):
+        raise SystemExit(
+            f"加 duration 失败: {db_id}.{prop_name} "
             f"status={r.status_code} body={r.text[:300]}"
         )
 
