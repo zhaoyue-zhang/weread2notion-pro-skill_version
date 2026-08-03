@@ -75,15 +75,17 @@ jobs:
           git config --local user.name "GitHub Action"
 
           # 并发场景下 rebase 一次可能不够（两个 run 同时 push），
-          # 这里用 rebase + push 重试 3 次兜底
+          # 这里用 rebase + push 重试 3 次兜底。
+          # 关键：必须先 git add，否则 rebase 会因为有 unstaged changes 拒绝
           for i in 1 2 3; do
             echo "=== attempt $i ==="
-            # rebase 一次：把别人的新 commit 拿到本地之上
+            git add OUT_FOLDER/weread-heatmap.svg
             if ! git pull --rebase origin main; then
-              echo "rebase failed, aborting rebase and retrying"
+              echo "rebase failed, aborting and retrying"
               git rebase --abort || true
               continue
             fi
+            # rebase 后可能 unstage 了，重新 add
             git add OUT_FOLDER/weread-heatmap.svg
             if git diff --cached --quiet; then
               echo "No diff — creating empty marker commit"
@@ -93,7 +95,7 @@ jobs:
               git diff --cached --stat
               git commit -m "update: heatmap $(date -u +'%Y-%m-%dT%H:%M:%SZ')"
             fi
-            # 立刻再 rebase 一次，确保本地 HEAD 包含别人刚刚 push 的内容
+            # 立刻再 rebase 一次 + push，确保本地 HEAD 包含别人刚刚 push 的内容
             if git pull --rebase origin main && git push; then
               echo "pushed OK"
               exit 0
