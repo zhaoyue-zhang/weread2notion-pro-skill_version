@@ -66,25 +66,43 @@ jobs:
           echo "--- after rename ---"
           ls -la OUT_FOLDER/
       - name: push
+        env:
+          # push 步骤需要写权限（默认是 read-only，参考之前修的 workflow 权限）
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           set -e
           git config --local user.email "action@github.com"
           git config --local user.name "GitHub Action"
-          # 先 rebase 避免和 remote 撞车（之前几次有别人 push 过）
-          git pull --rebase origin main || true
-          git add OUT_FOLDER/weread-heatmap.svg
-          # 优雅处理 "nothing to commit"：当天没新读时 SVG 内容可能不变，
-          # build_heatmap 现在会 append 时间戳避免这个问题，但仍然
-          # 用 --allow-empty 兜底保证 push 不会因为没 diff 而 fail
-          if git diff --cached --quiet; then
-            echo "No diff — creating empty marker commit"
-            git commit --allow-empty -m "chore: heatmap run $(date -u +'%Y-%m-%dT%H:%M:%SZ') (no data change)"
-          else
-            echo "--- diff ---"
-            git diff --cached --stat
-            git commit -m "update: heatmap $(date -u +'%Y-%m-%dT%H:%M:%SZ')"
-          fi
-          git push
+
+          # 并发场景下 rebase 一次可能不够（两个 run 同时 push），
+          # 这里用 rebase + push 重试 3 次兜底
+          for i in 1 2 3; do
+            echo "=== attempt $i ==="
+            # rebase 一次：把别人的新 commit 拿到本地之上
+            if ! git pull --rebase origin main; then
+              echo "rebase failed, aborting rebase and retrying"
+              git rebase --abort || true
+              continue
+            fi
+            git add OUT_FOLDER/weread-heatmap.svg
+            if git diff --cached --quiet; then
+              echo "No diff — creating empty marker commit"
+              git commit --allow-empty -m "chore: heatmap run $(date -u +'%Y-%m-%dT%H:%M:%SZ') (no data change)"
+            else
+              echo "--- diff ---"
+              git diff --cached --stat
+              git commit -m "update: heatmap $(date -u +'%Y-%m-%dT%H:%M:%SZ')"
+            fi
+            # 立刻再 rebase 一次，确保本地 HEAD 包含别人刚刚 push 的内容
+            if git pull --rebase origin main && git push; then
+              echo "pushed OK"
+              exit 0
+            fi
+            echo "push failed, retrying in 2s"
+            sleep 2
+          done
+          echo "ERROR: failed to push after 3 attempts"
+          exit 1
       - name: read time sync
         run: |
           read_time
