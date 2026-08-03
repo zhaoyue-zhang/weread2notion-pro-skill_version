@@ -40,6 +40,9 @@ jobs:
         run: |
           python -m pip install --upgrade pip
           pip install -r requirements.txt
+          # 关键：装本地 fork，不是 PyPI 上的 weread2notionpro 老版本
+          # (PyPI 同名包是原作者 0.6.8，会覆盖我们的修改)
+          pip install -e .
       - name: Remove folder
         run: rm -rf ./OUT_FOLDER
       - name: Set default year if not provided

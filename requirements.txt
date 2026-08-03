@@ -5,4 +5,5 @@ svgwrite
 retrying
 pendulum
 python-dotenv
-weread2notionpro
+# weread2notionpro 不在这里 — PyPI 上有同名老版本（malinkang 0.6.8），会覆盖本地代码
+# 由 workflow `pip install -e .` 装本地 fork 版本
