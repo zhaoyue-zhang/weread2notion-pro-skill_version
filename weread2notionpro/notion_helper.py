@@ -3,6 +3,7 @@ import os
 import re
 import time
 
+import requests
 from notion_client import Client
 import pendulum
 from retrying import retry
@@ -162,10 +163,32 @@ class NotionHelper:
                         break
 
     def update_book_database(self):
-        """更新数据库"""
-        response = self.client.databases.retrieve(database_id=self.book_database_id)
-        id = response.get("id")
-        properties = response.get("properties")
+        """更新数据库：补齐 书架 上缺的几个字段（阅读时长/书架分类/豆瓣链接/我的评分/豆瓣短评）。
+
+        2025-09-03 Notion API 起 schema 从 database 移到了 data_source；
+        老 `client.databases.retrieve()` 返回的 properties 是 None。
+        这里走 data_source 端点。
+        """
+        if not self.book_database_id:
+            return  # 没有「书架」database，跳过
+
+        # 拿 data_source id
+        db_resp = self.client.databases.retrieve(database_id=self.book_database_id)
+        data_sources = db_resp.get("data_sources") or []
+        if not data_sources:
+            return
+        ds_id = data_sources[0]["id"]
+
+        # 读 schema
+        ds_resp = requests.get(
+            f"https://api.notion.com/v1/data_sources/{ds_id}",
+            headers={
+                "Authorization": f"Bearer {os.getenv('NOTION_TOKEN')}",
+                "Notion-Version": "2025-09-03",
+            },
+        )
+        properties = (ds_resp.json() or {}).get("properties") or {}
+
         update_properties = {}
         if (
             properties.get("阅读时长") is None
@@ -193,8 +216,18 @@ class NotionHelper:
         ):
             update_properties["豆瓣短评"] = {"rich_text": {}}
         """NeoDB先不添加了，现在受众还不广，可能有的小伙伴不知道是干什么的"""
+
         if len(update_properties) > 0:
-            self.client.databases.update(database_id=id, properties=update_properties)
+            # data_source 端点（2025-09-03 起）
+            requests.patch(
+                f"https://api.notion.com/v1/data_sources/{ds_id}",
+                headers={
+                    "Authorization": f"Bearer {os.getenv('NOTION_TOKEN')}",
+                    "Notion-Version": "2025-09-03",
+                    "Content-Type": "application/json",
+                },
+                json={"properties": update_properties},
+            )
 
     def create_database(self):
         title = [
