@@ -191,20 +191,47 @@ def main():
         bookIds = archive.get("bookIds") or []
         archive_dict.update({bookId: name for bookId in bookIds})
     not_need_sync = []
-    for key, value in notion_books.items():
-        if (
-            (
-                key not in bookProgress
-                or value.get("readingTime") == bookProgress.get(key).get("readingTime")
-            )
-            and (archive_dict.get(key) == value.get("category"))
-            and (value.get("cover") is not None)
-            and (
-                value.get("status") != "已读"
-                or (value.get("status") == "已读" and value.get("myRating"))
-            )
-        ) and not force:
-            not_need_sync.append(key)
+    # Gateway 模式：bookProgress 是空 dict（不返回每本书的 readingTime），
+    # 旧逻辑会把所有书加进 not_need_sync 导致 0 本需要 sync。
+    # 改用 shelf/sync 的 readUpdateTime 和 Notion 现有最后阅读时间对比，
+    # 来判断哪些书真的"没变化"可以跳过。
+    if not bookProgress:
+        shelf_read_updates = {}
+        for sb in (bookshelf_books.get("books") or []):
+            bid = sb.get("bookId")
+            rut = sb.get("readUpdateTime")
+            if bid and rut:
+                shelf_read_updates[bid] = rut
+        for key, value in notion_books.items():
+            shelf_rut = shelf_read_updates.get(key)
+            notion_lr = value.get("最后阅读时间")
+            if (
+                archive_dict.get(key) == value.get("category")
+                and value.get("cover") is not None
+                and (
+                    value.get("status") != "已读"
+                    or (value.get("status") == "已读" and value.get("myRating"))
+                )
+                and shelf_rut is not None
+                and notion_lr is not None
+                and int(shelf_rut) <= int(notion_lr)
+            ) and not force:
+                not_need_sync.append(key)
+    else:
+        for key, value in notion_books.items():
+            if (
+                (
+                    key not in bookProgress
+                    or value.get("readingTime") == bookProgress.get(key).get("readingTime")
+                )
+                and (archive_dict.get(key) == value.get("category"))
+                and (value.get("cover") is not None)
+                and (
+                    value.get("status") != "已读"
+                    or (value.get("status") == "已读" and value.get("myRating"))
+                )
+            ) and not force:
+                not_need_sync.append(key)
     notebooks = weread_api.get_notebooklist()
     notebooks = [d["bookId"] for d in notebooks if "bookId" in d]
     books = bookshelf_books.get("books") or []
