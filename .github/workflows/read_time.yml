@@ -79,7 +79,10 @@ jobs:
           # commit 之后 rebase 把它当本地 commit 处理，可以正常 rebase 到最新 remote 之上。
           for i in 1 2 3; do
             echo "=== attempt $i ==="
-            git add OUT_FOLDER/weread-heatmap.svg
+            # 用 -A 而不是只 add weread-heatmap.svg：
+            #   OUT_FOLDER/ 里可能有遗留的 weread.svg（HEAD 还跟踪着但工作区已被 mv 删了），
+            #   只 add 新文件的话这个 deletion 不会被 stage，rebase 会因为 'unstaged changes' 拒绝
+            git add -A OUT_FOLDER/
             if git diff --cached --quiet; then
               echo "No diff — creating empty marker commit"
               git commit --allow-empty -m "chore: heatmap run $(date -u +'%Y-%m-%dT%H:%M:%SZ') (no data change)"
