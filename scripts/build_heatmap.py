@@ -16,6 +16,7 @@ convention). The svgwrite output is then mutated to:
 import os
 import re
 import sys
+import time
 from datetime import datetime
 from zoneinfo import ZoneInfo
 
@@ -39,7 +40,7 @@ def _gateway_request(api_key, api_name, **params):
             "Authorization": f"Bearer {api_key}",
             "Content-Type": "application/json",
         },
-        timeout=30,
+        timeout=15,  # 原来 30s 太长：12 个月 × 30s = 6 分钟；CI 上卡 5+ 分钟常态
     )
     r.raise_for_status()
     data = r.json()
@@ -70,6 +71,8 @@ def fetch_daily_read_times(api_key, year):
             continue
         for k, v in (data.get("readTimes") or {}).items():
             merged[int(k)] = int(v)
+        # 礼貌避开 rate limit（之前连续 12 次偶发 throttle）
+        time.sleep(0.3)
     return merged
 
 
@@ -111,8 +114,13 @@ def compute_stats(read_times_for_year: dict, year: int) -> dict:
     }
 
 
-def make_patched_loader(api_key):
-    """Return a WereadLoader subclass whose data source is the gateway."""
+def make_patched_loader(api_key, cache=None):
+    """Return a WereadLoader subclass whose data source is the gateway.
+
+    If ``cache`` is provided, ``get_api_data`` reads/writes through it
+    so multiple Loader instances (or the explicit stats call after
+    run()) share the same data without re-fetching.
+    """
     from github_heatmap.loader.weread_loader import WereadLoader
 
     class GatewayWereadLoader(WereadLoader):
@@ -120,6 +128,11 @@ def make_patched_loader(api_key):
             pass  # no notionhub involvement
 
         def get_api_data(self):
+            if cache is not None:
+                return cache.setdefault(
+                    "data",
+                    {"readTimes": fetch_daily_read_times(api_key, self.from_year)},
+                )
             return {"readTimes": fetch_daily_read_times(api_key, self.from_year)}
 
     return GatewayWereadLoader
@@ -324,6 +337,10 @@ def main():
     ]
 
     from github_heatmap.cli import run
+    # 共享 cache：cli.run() 里 Loader.get_api_data() 和我们后面 compute_stats
+    # 用的都是同一份 readTimes，节省一半 API 调用（之前是 12+12=24 次）
+    _cache = {}
+    LOADER_DICT["weread"] = make_patched_loader(api_key, cache=_cache)
     run()
 
     out_file = os.path.join(ROOT, "OUT_FOLDER", "weread.svg")
@@ -331,8 +348,8 @@ def main():
         print("ERROR: cli.run did not produce weread.svg")
         sys.exit(1)
 
-    # Compute stats from the same data source the heatmap used
-    read_times = fetch_daily_read_times(api_key, year)
+    # 复用 cache，不再 fetch 第二次
+    read_times = _cache.get("data", {}).get("readTimes", {})
     stats = compute_stats(read_times, year)
     print(f"stats for {year}: {stats}")
 
