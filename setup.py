@@ -1,6 +1,7 @@
 from setuptools import setup, find_packages
 
 setup(
+    name="weread2notionpro",  # 显式声明，避免 pip 装成 UNKNOWN
     version="0.2.5",
     packages=find_packages(),
     install_requires=[
