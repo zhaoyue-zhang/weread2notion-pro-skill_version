@@ -31,6 +31,9 @@ USER_ICON_URL = "https://www.notion.so/icons/user-circle-filled_gray.svg"
 TARGET_ICON_URL = "https://www.notion.so/icons/target_red.svg"
 BOOKMARK_ICON_URL = "https://www.notion.so/icons/bookmark_gray.svg"
 
+NOTION_API = "https://api.notion.com/v1"
+NOTION_VERSION = "2022-06-28"  # 旧 API 端点仍可用，但 query 走 v2025-09-03
+
 
 class NotionHelper:
     database_name_dict = {
@@ -392,7 +395,8 @@ class NotionHelper:
         if key in self.__cache:
             return self.__cache.get(key)
         filter = {"property": "标题", "title": {"equals": name}}
-        response = self.client.databases.query(database_id=id, filter=filter)
+        # 走 self.query()（已经适配 data_source 端点）
+        response = self.query(database_id=id, filter=filter)
         if len(response.get("results")) == 0:
             parent = {"database_id": id, "type": "database_id"}
             properties["标题"] = get_title(name)
@@ -491,8 +495,39 @@ class NotionHelper:
 
     @retry(stop_max_attempt_number=3, wait_fixed=5000)
     def query(self, **kwargs):
+        # 2025-09-03 Notion API: client.databases.query() 被删了，
+        # 要用 client.data_sources.query()。但库 v2.4.0 还没适配，
+        # 这里直接用 requests 走 data_source 端点（v2025-09-03）。
         kwargs = {k: v for k, v in kwargs.items() if v}
-        return self.client.databases.query(**kwargs)
+        database_id = kwargs.pop("database_id", None)
+        if not database_id:
+            raise ValueError("database_id is required")
+        # 1) 拿 database 的 data_source id
+        db_resp = requests.get(
+            f"{NOTION_API}/databases/{database_id}",
+            headers=self._headers_v2(),
+        )
+        db_resp.raise_for_status()
+        data_sources = (db_resp.json() or {}).get("data_sources") or []
+        if not data_sources:
+            raise Exception(f"no data_source for database {database_id}")
+        ds_id = data_sources[0]["id"]
+        # 2) 走 data_source 端点 query
+        ds_resp = requests.post(
+            f"{NOTION_API}/data_sources/{ds_id}/query",
+            headers=self._headers_v2(),
+            json=kwargs,
+            timeout=30,
+        )
+        ds_resp.raise_for_status()
+        return ds_resp.json()
+
+    def _headers_v2(self):
+        return {
+            "Authorization": f"Bearer {os.getenv('NOTION_TOKEN')}",
+            "Content-Type": "application/json",
+            "Notion-Version": "2025-09-03",
+        }
 
     @retry(stop_max_attempt_number=3, wait_fixed=5000)
     def get_block_children(self, id):
@@ -547,11 +582,12 @@ class NotionHelper:
 
     @retry(stop_max_attempt_number=3, wait_fixed=5000)
     def query_all_by_book(self, database_id, filter):
+        # 走 self.query() (已经适配 data_source 端点)
         results = []
         has_more = True
         start_cursor = None
         while has_more:
-            response = self.client.databases.query(
+            response = self.query(
                 database_id=database_id,
                 filter=filter,
                 start_cursor=start_cursor,
@@ -569,7 +605,7 @@ class NotionHelper:
         has_more = True
         start_cursor = None
         while has_more:
-            response = self.client.databases.query(
+            response = self.query(
                 database_id=database_id,
                 start_cursor=start_cursor,
                 page_size=100,
