@@ -70,6 +70,8 @@ jobs:
           set -e
           git config --local user.email "action@github.com"
           git config --local user.name "GitHub Action"
+          # 先 rebase 避免和 remote 撞车（之前几次有别人 push 过）
+          git pull --rebase origin main || true
           git add OUT_FOLDER/weread-heatmap.svg
           # 优雅处理 "nothing to commit"：当天没新读时 SVG 内容可能不变，
           # build_heatmap 现在会 append 时间戳避免这个问题，但仍然
